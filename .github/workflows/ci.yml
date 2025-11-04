@@ -1,0 +1,61 @@
+# .github/workflows/ci.yml
+
+name: Pipeline CI Python FastAPI
+
+# Déclenche cette action à chaque 'push' sur la branche 'main'
+# ou à chaque 'pull request' ciblant 'main'.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    # Utilise la dernière version d'Ubuntu pour exécuter le job
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupère le code de votre dépôt
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      # 2. Met en place l'environnement Python
+      - name: Configuration de Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 3. Étape : Installation des dépendances
+      - name: Installation des dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. Étape : Démarrage du projet (en arrière-plan)
+      # Nous démarrons le serveur FastAPI avec uvicorn.
+      # Le '&' à la fin exécute la commande en arrière-plan,
+      # permettant à la pipeline de continuer à l'étape suivante.
+      - name: Démarrage du serveur FastAPI en arrière-plan
+        run: uvicorn main:app --host 0.0.0.0 --port 8000 &
+
+      # 5. Attente
+      # Laisse quelques secondes au serveur pour démarrer complètement
+      # avant d'essayer de le 'curler'.
+      - name: Attente du démarrage du serveur
+        run: sleep 5
+
+      # 6. Étape : Exécution d’un curl
+      # Nous vérifions si le serveur est en ligne et répond.
+      # L'option '-f' (fail-fast) fait échouer le curl (et donc la pipeline)
+      # si le serveur retourne une erreur HTTP (ex: 404, 500).
+      - name: Vérification du serveur avec curl
+        run: curl -f http://localhost:8000/
+
+      # 7. Étape : Exécution d’un test automatique
+      # Exécute les tests définis dans 'test_main.py' avec pytest.
+      # Note : Ces tests (via TestClient) n'ont pas besoin que le serveur
+      # tourne, mais ils valident la logique de l'application.
+      # Avoir les DEUX (curl + pytest) est une pratique robuste.
+      - name: Exécution des tests automatiques (pytest)
+        run: pytest
